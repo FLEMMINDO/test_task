@@ -1,21 +1,30 @@
-import ipaddress
+# import ipaddress
+import os
+from pathlib import Path
+import hashlib
 import json
-from datetime import datetime, timezone
-from typing import Any
-
+# from datetime import datetime, timezone
+# from typing import Any, Dict
+from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from yookassa.domain.notification import WebhookNotification
-
-from app.db_depends import get_async_db
-from app.models.orders import Order as OrderModel
+from APP.db_depends import get_async_db
+from APP.models.accounts import Accounts as AccountModel
+from APP.models.transactions import Transaction as TransactionModel
 
 router = APIRouter(
     prefix="/payments",
     tags=["payments"],
 )
+
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+ENV_FILE = BASE_DIR / ".env"
+
+load_dotenv(ENV_FILE)
+
+SECRET_KEY = os.getenv("PAYM_SECRET_KEY")
 
 # Список разрешенных сетей/адресов для проверки источника вебхука
 # SYSTEMS_IP_LIST: tuple[str, ...] = (
@@ -46,7 +55,24 @@ router = APIRouter(
 #         return forwarded_for.split(",")[0].strip()
 #     return request.client.host if request.client else None
 
+def signature_check(data: dict) -> bool:
 
+    json_signature = data.pop('signature')
+
+    sorted_keys = sorted(data.keys())
+
+    concatenated = ""
+    for key in sorted_keys:
+        concatenated += str(data[key])
+
+    concatenated += SECRET_KEY
+
+    signature = hashlib.sha256(concatenated.encode('utf-8')).hexdigest()
+
+    if signature == json_signature:
+        return True
+
+    return False
 
 
 @router.post("/webhook", status_code=status.HTTP_200_OK)
@@ -63,32 +89,26 @@ async def payment_webhook(
     except json.JSONDecodeError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid JSON: {exc}")
 
-    try:
-        notification = WebhookNotification(payload)
-    except Exception as exc:  # noqa: BLE001
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
-                            detail=f"Invalid notification: {exc}")
+    if signature_check(payload):
+        account_q = select(AccountModel).where(AccountModel.user_id == payload.get('user_id'),
+                                               AccountModel.id == payload.get('account_id'))
 
-    payment = notification.object
-    order_id = payment.metadata.get("order_id") if payment.metadata else None
+        db_acc = (await db.scalars(account_q)).first()
 
-    if not order_id:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing order id")
+        if not db_acc:
+            db_acc = AccountModel(user_id=payload.get('user_id'), amount=payload.get('amount'))
+            db.add(db_acc)
+        else:
+            db_acc.amount += payload.get('amount')
 
-    result = await db.scalars(select(OrderModel).where(OrderModel.id == int(order_id)))
-    order = result.first()
-    if order is None:
-        return {"status": "ignored"}
+        await db.flush()
 
-    if payment.status == "succeeded":
-        if not order.paid_at:
-            order.status = "paid"
-            order.paid_at = datetime.now(timezone.utc)
-            order.payment_id = payment.id
+        new_transact = TransactionModel(user_id=payload.get('user_id'), amount=payload.get('amount'),
+                                        account_id=db_acc.id, transaction_id=payload.get('transaction_id'))
+        db.add(new_transact)
         await db.commit()
-        return {"status": "ok"}
-    elif payment.status == "canceled":
-        order.status = "canceled"
 
-    await db.commit()
+    else:
+        raise HTTPException(status_code=403, detail='Invalid signature')
+
     return {"status": "ok"}

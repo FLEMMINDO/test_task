@@ -1,20 +1,18 @@
 import jwt
-from pathlib import Path
-import uuid
 import os
 from dotenv import load_dotenv
+from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, or_, func, delete
+from sqlalchemy import select, update
 from sqlalchemy.orm import selectinload
 
-
-# from app.config import SECRET_KEY, ALGORITHM
 from APP.models.users import User as UserModel
 from APP.models.accounts import Accounts as AccountModel
-# from app.schemas import UserCreate, User as UserSchema, UserUpdate, RefreshTokenRequest, UserList
+from APP.schemas.users import User as UserSchema, UserCreateUpdate
+from APP.schemas.tokens import RefreshTokenRequest
 from APP.db_depends import get_async_db
 from APP.auth import (hash_password, verify_password, create_access_token, create_refresh_token,
                       get_current_user, get_current_admin)
@@ -28,10 +26,10 @@ ENV_FILE = BASE_DIR / ".env"
 load_dotenv(ENV_FILE)
 
 SECRET_KEY = os.getenv("SECRET_KEY")
-ALGORITH = os.getenv("HASH_ALGORITHM")
+ALGORITHM = os.getenv("HASH_ALGORITHM")
 
 
-@router.get('/list', response_model=UserList, status_code=status.HTTP_200_OK)
+@router.get('/list', response_model=list[UserSchema], status_code=status.HTTP_200_OK)
 async def get_users(
         user: UserModel = Depends(get_current_admin),
         db: AsyncSession = Depends(get_async_db)
@@ -43,7 +41,7 @@ async def get_users(
     db_users = await db.scalars(
         select(UserModel)
         .options(
-            selectinload(UserModel.accounts).selectinload(AccountModel.transactions), # PYDANTIC MODEL
+            selectinload(UserModel.accounts).selectinload(AccountModel.transactions),
         )
     )
 
@@ -55,14 +53,14 @@ async def get_user(
         user: UserModel = Depends(get_current_user),
         db: AsyncSession = Depends(get_async_db)
 ):
-    db_user = await db.scalars(select(UserModel).where(UserModel.id == user.id)) # PYDANTIC MODEL for id email fullname
+    db_user = await db.scalars(select(UserModel).where(UserModel.id == user.id))
 
     return db_user
 
 
 @router.post("/register", response_model=UserSchema, status_code=status.HTTP_201_CREATED)
 async def create_user(
-        new_user: UserCreate,
+        new_user: UserCreateUpdate,
         user: UserModel = Depends(get_current_admin),
         db: AsyncSession = Depends(get_async_db)
 ):
@@ -70,20 +68,20 @@ async def create_user(
     Регистрирует нового пользователя с ролью "user"
     """
 
-    result = await db.scalars(select(UserModel).where(UserModel.email == user.email))
+    result = await db.scalars(select(UserModel).where(UserModel.email == new_user.email))
     if result.first():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT,
                             detail="Email already registered")
 
-    result = await db.scalars(select(UserModel).where(UserModel.full_name == user.full_name))
+    result = await db.scalars(select(UserModel).where(UserModel.full_name == new_user.full_name))
     if result.first():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT,
                             detail='Username already registered')
 
     db_user = UserModel(
-        email=user.email,
-        username=user.username,
-        hashed_password=hash_password(user.password)
+        email=new_user.email,
+        username=new_user.full_name,
+        hashed_password=hash_password(new_user.password)
     )
 
     db.add(db_user)
@@ -95,7 +93,7 @@ async def create_user(
 
 @router.put("/{user_id}", response_model=UserSchema, status_code=status.HTTP_200_OK)
 async def update_user(user_id: int,
-                      user: UserUpdate,
+                      user: UserCreateUpdate,
                       current_user: UserModel = Depends(get_current_admin),
                       db: AsyncSession = Depends(get_async_db)):
     """
@@ -160,10 +158,8 @@ async def login(
     Аутентифицирует пользователя и возвращает JWT с email, role и id.
     """
     result = await db.scalars(
-        select(UserModel).where(UserModel.is_active == True,
-                                or_(
-                                    UserModel.email == form_data.username,
-                                    UserModel.username == form_data.username)))
+        select(UserModel).where(UserModel.email == form_data.username))
+
     user = result.first()
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
@@ -211,8 +207,7 @@ async def refresh_token(
     # Проверяем, что пользователь существует и активен
     result = await db.scalars(
         select(UserModel).where(
-            UserModel.email == email,
-            UserModel.is_active == True
+            UserModel.email == email
         )
     )
     user = result.first()
@@ -265,8 +260,7 @@ async def access_token(
     # Проверяем, что пользователь существует и активен
     result = await db.scalars(
         select(UserModel).where(
-            UserModel.email == email,
-            UserModel.is_active == True
+            UserModel.email == email
         )
     )
     user = result.first()
