@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from APP.db_depends import get_async_db
-from APP.models.accounts import Accounts as AccountModel
+from APP.models.accounts import Account as AccountModel
 from APP.models.transactions import Transaction as TransactionModel
 
 router = APIRouter(

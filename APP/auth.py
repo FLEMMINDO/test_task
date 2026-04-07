@@ -81,7 +81,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme),
     except jwt.PyJWTError:
         raise credentials_exception
     result = await db.scalars(
-        select(UserModel).where(UserModel.email == email, UserModel.is_active == True))
+        select(UserModel).where(UserModel.email == email))
     user = result.first()
     if user is None:
         raise credentials_exception

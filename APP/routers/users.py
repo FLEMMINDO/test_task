@@ -10,8 +10,8 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import selectinload
 
 from APP.models.users import User as UserModel
-from APP.models.accounts import Accounts as AccountModel
-from APP.schemas.users import User as UserSchema, UserCreateUpdate
+from APP.models.accounts import Account as AccountModel
+from APP.schemas.users import User as UserSchema, UserCreateUpdate, FullUser as FullUserSchema
 from APP.schemas.tokens import RefreshTokenRequest
 from APP.db_depends import get_async_db
 from APP.auth import (hash_password, verify_password, create_access_token, create_refresh_token,
@@ -29,7 +29,7 @@ SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = os.getenv("HASH_ALGORITHM")
 
 
-@router.get('/list', response_model=list[UserSchema], status_code=status.HTTP_200_OK)
+@router.get('/list', response_model=list[FullUserSchema], status_code=status.HTTP_200_OK)
 async def get_users(
         user: UserModel = Depends(get_current_admin),
         db: AsyncSession = Depends(get_async_db)
@@ -53,7 +53,7 @@ async def get_user(
         user: UserModel = Depends(get_current_user),
         db: AsyncSession = Depends(get_async_db)
 ):
-    db_user = await db.scalars(select(UserModel).where(UserModel.id == user.id))
+    db_user = (await db.scalars(select(UserModel).where(UserModel.id == user.id))).first()
 
     return db_user
 
@@ -80,7 +80,7 @@ async def create_user(
 
     db_user = UserModel(
         email=new_user.email,
-        username=new_user.full_name,
+        full_name=new_user.full_name,
         hashed_password=hash_password(new_user.password)
     )
 
@@ -121,7 +121,7 @@ async def update_user(user_id: int,
 
     await db.execute(update(UserModel)
                      .where(UserModel.id == user_id)
-                     .values(**user.model_dump(exclude_unset=True)))
+                     .values(full_name=user.full_name, email=user.email, hashed_password=hash_password(user.password)))
 
     await db.commit()
     await db.refresh(db_user)
@@ -146,7 +146,7 @@ async def delete_user(user_id: int,
     await db.delete(db_user)
     await db.commit()
 
-    return db_user
+    return {'status': 'success', 'detail': 'user deleted'}
 
 
 @router.post("/token")
