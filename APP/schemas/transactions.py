@@ -4,6 +4,10 @@ from datetime import datetime
 
 
 class Transaction(BaseModel):
+    """
+    Модель для валидации транзакции
+    вложенная модель в Accounts
+    """
     id: int = Field(..., description='Уникальный идентификатор')
     transaction_id: str = Field(..., description='Уникальный идентификатор транзакции')
     amount: Decimal = Field(..., description='Сумма транзакции')

@@ -5,7 +5,7 @@ from APP.schemas.accounts import Account
 
 class User(BaseModel):
     """
-    Модель для пользователя
+    Модель для информации пользователя
     используется в GET запросах
     """
     id: int = Field(..., description='Уникальный идентификатор')
@@ -16,12 +16,20 @@ class User(BaseModel):
 
 
 class UserCreateUpdate(BaseModel):
+    """
+    Модель для создания пользователя
+    используется в POST/PUT запросах
+    """
     full_name: str = Field(..., description='Полное наименование')
     email: str = Field(..., description='Электронная почта')
     password: str = Field(..., description='Пароль')
 
 
 class FullUser(BaseModel):
+    """
+    Модель для полной информации пользователя
+    используется в GET запросах
+    """
     id: int = Field(..., description='Уникальный идентификатор')
     full_name: str = Field(..., description='Полное наименование')
     email: str = Field(..., description='Электронная почта')

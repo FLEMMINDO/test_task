@@ -7,12 +7,16 @@ import json
 # from typing import Any, Dict
 from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from APP.db_depends import get_async_db
 from APP.models.accounts import Account as AccountModel
+from APP.models.users import User as UserModel
 from APP.models.transactions import Transaction as TransactionModel
+
+from APP.schemas.payments import Payment
 
 router = APIRouter(
     prefix="/payments",
@@ -26,7 +30,7 @@ load_dotenv(ENV_FILE)
 
 SECRET_KEY = os.getenv("PAYM_SECRET_KEY")
 
-# Список разрешенных сетей/адресов для проверки источника вебхука
+# Список разрешенных сетей/адресов для проверки источника запроса
 # SYSTEMS_IP_LIST: tuple[str, ...] = (
 # )
 
@@ -80,6 +84,7 @@ async def payment_webhook(
         request: Request,
         db: AsyncSession = Depends(get_async_db),
 ):
+    # Проверка на ip отправляющий запрос, может быть полезно
     # client_ip = _extract_client_ip(request)
     # if not is_ip_allowed(client_ip):
     #     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="IP not allowed")
@@ -90,6 +95,18 @@ async def payment_webhook(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid JSON: {exc}")
 
     if signature_check(payload):
+        try:
+            payment_data = Payment(**payload)
+        except ValidationError as e:
+            raise HTTPException(status_code=422, detail=e.errors())
+
+        user_q = select(UserModel).where(UserModel.id == payload.get('user_id'))
+
+        db_user = (await db.scalars(user_q)).first()
+
+        if not db_user:
+            raise HTTPException(status_code=400, detail='User with this id not found')
+
         account_q = select(AccountModel).where(AccountModel.user_id == payload.get('user_id'),
                                                AccountModel.id == payload.get('account_id'))
 

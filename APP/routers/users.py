@@ -11,7 +11,10 @@ from sqlalchemy.orm import selectinload
 
 from APP.models.users import User as UserModel
 from APP.models.accounts import Account as AccountModel
+from APP.models.transactions import Transaction as TransactionModel
 from APP.schemas.users import User as UserSchema, UserCreateUpdate, FullUser as FullUserSchema
+from APP.schemas.accounts import Account as AccountSchema
+from APP.schemas.transactions import Transaction as TransactionSchema
 from APP.schemas.tokens import RefreshTokenRequest
 from APP.db_depends import get_async_db
 from APP.auth import (hash_password, verify_password, create_access_token, create_refresh_token,
@@ -35,7 +38,7 @@ async def get_users(
         db: AsyncSession = Depends(get_async_db)
 ):
     """
-    Получение списка пользователей и счетов с балансами (admin_endpoint)
+    Получает список пользователей и счетов с балансами (admin_endpoint)
     """
 
     db_users = await db.scalars(
@@ -49,13 +52,44 @@ async def get_users(
 
 
 @router.get('/info', response_model=UserSchema, status_code=status.HTTP_200_OK)
-async def get_user(
+async def get_user_info(
         user: UserModel = Depends(get_current_user),
         db: AsyncSession = Depends(get_async_db)
 ):
+    """
+    Получает информацию о пользователе (id, email, full_name)
+    """
     db_user = (await db.scalars(select(UserModel).where(UserModel.id == user.id))).first()
 
     return db_user
+
+
+@router.get('/accounts', response_model=list[AccountSchema], status_code=status.HTTP_200_OK)
+async def get_user_accounts(
+        user: UserModel = Depends(get_current_user),
+        db: AsyncSession = Depends(get_async_db)
+):
+    """
+    Получает информацию о счетах пользователя
+    """
+    db_accounts = (await db.scalars(select(AccountModel)
+                                    .where(AccountModel.user_id == user.id)
+                                    .options(selectinload(AccountModel.transactions)))).all()
+
+    return db_accounts
+
+
+@router.get('/transactions', response_model=list[TransactionSchema], status_code=status.HTTP_200_OK)
+async def get_user_transactions(
+        user: UserModel = Depends(get_current_user),
+        db: AsyncSession = Depends(get_async_db)
+):
+    """
+    Получает информацию о платежах пользователей
+    """
+    db_transactions = (await db.scalars(select(TransactionModel).where(TransactionModel.user_id == user.id))).all()
+
+    return db_transactions
 
 
 @router.post("/register", response_model=UserSchema, status_code=status.HTTP_201_CREATED)
@@ -65,7 +99,7 @@ async def create_user(
         db: AsyncSession = Depends(get_async_db)
 ):
     """
-    Регистрирует нового пользователя с ролью "user"
+    Регистрирует нового пользователя с ролью "user" (admin_endpoint)
     """
 
     result = await db.scalars(select(UserModel).where(UserModel.email == new_user.email))
@@ -97,7 +131,7 @@ async def update_user(user_id: int,
                       current_user: UserModel = Depends(get_current_admin),
                       db: AsyncSession = Depends(get_async_db)):
     """
-    Обновляет данные пользователя по ID
+    Обновляет данные пользователя по ID (admin_endpoint)
     """
 
     result = await db.scalars(select(UserModel).where(UserModel.id == user_id))
@@ -105,7 +139,7 @@ async def update_user(user_id: int,
 
     if not db_user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
-                            detail=f"User with id {current_user.id} not found")
+                            detail=f"User with id {user_id} not found")
 
     uniq_name_q = select(UserModel).where(UserModel.full_name == user.full_name)
 
@@ -133,7 +167,7 @@ async def delete_user(user_id: int,
                       current_user: UserModel = Depends(get_current_admin),
                       db: AsyncSession = Depends(get_async_db)):
     """
-    Удаляет пользователя по ID
+    Удаляет пользователя по ID (admin_endpoint)
     """
 
     result = await db.scalars(select(UserModel).where(UserModel.id == user_id))
@@ -141,7 +175,7 @@ async def delete_user(user_id: int,
 
     if not db_user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
-                            detail=f"User with id {current_user.id} not found")
+                            detail=f"User with id {user_id} not found")
 
     await db.delete(db_user)
     await db.commit()

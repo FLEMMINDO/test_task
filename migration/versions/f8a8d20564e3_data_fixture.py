@@ -1,11 +1,10 @@
 """Data_fixture
 
-Revision ID: ed2cb59e7cac
-Revises: b0ef23b364e8
-Create Date: 2026-04-07 16:02:43.126335
+Revision ID: f8a8d20564e3
+Revises: 5686b7c1653c
+Create Date: 2026-04-08 22:03:56.106573
 
 """
-
 from typing import Sequence, Union
 
 from alembic import op
@@ -13,8 +12,8 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '422c7461b85f'
-down_revision: Union[str, Sequence[str], None] = 'b0ef23b364e8'
+revision: str = 'f8a8d20564e3'
+down_revision: Union[str, Sequence[str], None] = '5686b7c1653c'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
