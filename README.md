@@ -36,7 +36,7 @@ Use
 run psql shell, use:
 > CREATE DATABASE dimatech_db 
 > OWNER postgres 
-> ENCODING 'UTF8'
+> ENCODING 'UTF8';
 
 ## 3. change .env file
 change value **FROM** DB_HOST=db **TO** DB_HOST=localhost
