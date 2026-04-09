@@ -13,6 +13,7 @@ Test task for DimaTech ltd.
 # test_data
 user | email - test@mail.ru ; password - admin123 <br>
 admin | email - testAdm@mail.ru ; password - admin123 <br>
+PAYMENT_SECRET_KEY = gfdmhghif38yrf9ew0jkf32
 
 # deploy with docker
 ## 1. clone this .git repo
