@@ -1,5 +1,6 @@
 # test_task
 Test task for DimaTech ltd.
+https://docs.google.com/document/d/1UL--kxnn2gHd1X_vLPv10GODf4C9RXQBuJ5E4lykcxs/edit?usp=sharing
 
 # technologies
 - python
